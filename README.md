@@ -143,3 +143,57 @@ Sample after update: {
 
 ✨  Done in 3.68s.
 ```
+
+### Security and performance review
+
+- Strengths
+  - Uses `Program<Metadata>` and `Program<Token>` which anchor to the correct program IDs at runtime.
+  - Derives the metadata PDA with `seeds::program = token_metadata_program.key()` and validates via seeds, preventing spoofed PDAs.
+  - PDA account for sample data uses `has_one = authority` and signer checks, preventing unauthorized updates.
+
+- Recommended improvements
+  - Enforce the known Metadata program ID defensively in the handler, even though `Program<Metadata>` already constrains it.
+  - Add input length checks for `token_name`, `token_symbol`, and `token_uri` to fail early before CPI. Safe, commonly used limits are `name ≤ 32`, `symbol ≤ 10`, `uri ≤ 200`.
+  - Decide freeze behavior explicitly:
+    - If you want tokens to be non-freezable: keep freeze authority as `None` (current behavior when unspecified), or set it explicitly to `None`.
+    - If you want freeze control: set `mint::freeze_authority = payer.key()`.
+  - Validate decimals (e.g., `0 ≤ decimals ≤ 9`) to avoid non-standard configurations.
+  - Prefer minimal `msg!` logs in production to save compute; keep verbose logs for testing only.
+  - Optionally remove unused errors (e.g., `BumpNotFound` if no longer used) to reduce binary size.
+
+- Example code hardening (handler)
+
+```rust
+use anchor_lang::prelude::*;
+use anchor_spl::metadata::Metadata;
+
+require_keys_eq!(
+    ctx.accounts.token_metadata_program.key(),
+    Metadata::id(),
+    MyError::InvalidMetadataProgram
+);
+
+require!(token_name.len() <= 32, MyError::NameTooLong);
+require!(token_symbol.len() <= 10, MyError::SymbolTooLong);
+require!(token_uri.len() <= 200, MyError::UriTooLong);
+require!(_token_decimals <= 9, MyError::InvalidDecimals);
+```
+
+- Example explicit freeze authority (accounts)
+
+```rust
+#[account(
+    init,
+    payer = payer,
+    mint::decimals = _token_decimals,
+    mint::authority = payer.key(),
+    // choose one of the following explicitly
+    // mint::freeze_authority = payer.key(),      // freezable
+    // OR leave unset / set to None for non-freezable mint
+)]
+pub mint_account: Account<'info, Mint>;
+```
+
+- Client performance tips
+  - When submitting the transaction, prepend a compute budget instruction (increase CU limit and add priority fee) to reduce CPI-related failures under load.
+  - Batch multiple operations in one transaction only if compute fits; otherwise split into separate transactions.
