@@ -13,7 +13,7 @@ pub mod nguyen {
         Ok(())
     }
 
-    // 1) Create a new SPL token mint and its Metaplex metadata (user-provided snippet)
+    // 1) Create a new SPL token mint and its Metaplex metadata
     pub fn create_token_mint(
         ctx: Context<CreateTokenMint>,
         _token_decimals: u8,
@@ -77,7 +77,7 @@ pub mod nguyen {
 #[derive(Accounts)]
 pub struct Initialize {}
 
-// Accounts for creating a mint and its metadata (user-provided snippet)
+// Accounts for creating a mint and its metadata
 #[derive(Accounts)]
 #[instruction(_token_decimals: u8)]
 pub struct CreateTokenMint<'info> {
